@@ -33,10 +33,6 @@ void write(word addr, byte value){
 //Executes one instruction from memory.
 unsigned step(struct state *s, byte (*read)(word), void (*write)(word, byte)) {
 
-    //TODO: make this work
-    //byte x = read(0x1234);
-    //write(0x1234, x);
-
     word t = 0; //a temporary value used in instructions
     byte M = 0; //the value being applied to the instruction
     word m = 0;
@@ -203,6 +199,7 @@ CC10:
             cycles = (aaa == 5 || aaa == 4) ? 3 : 5;
             break;
         case 2: // accumulator
+            //TODO: make this one work
             cycles = 2;
             break;
         case 3: // absolute
@@ -224,7 +221,7 @@ CC10:
             h = read(s->PC++) << 8;
             m = h | l;
             if (aaa == 5) {
-                m = m + s->X;
+                m = m + s->Y;
                 cycles = ((((m + s->Y) >> 8) & 0xFF ) == ((h >> 8) & 0xFF)) ? 4 : 5;
             } else {
                 m = m + s->X;
@@ -237,7 +234,116 @@ CC10:
 
     M = read(m);
 
+    switch (aaa) {
+        case 0:
+            goto ASL;
+        case 1:
+            goto ROL;
+        case 2:
+            goto LSR;
+        case 3:
+            goto ROR;
+        case 4:
+            goto STX;
+        case 5:
+            goto LDX;
+        case 6:
+            goto DEC;
+        case 7:
+            goto INC;
+        default:
+            break;
+    }
+
+ASL:
+    s->C = BIT(M, 7);
+    write(m, (M << 1) & 0xFE);
+    s->N = s->C;
+    s->Z = (M == 0) ? 1 : 0;
+    return cycles;
+ROL:
+    t = BIT(M, 7);
+    write(m, (M << 1) & 0xFE);
+    M = read(m);
+    write(m, M | s->C);
+    s->C = t;
+    s->N = t;
+    s->Z = (M == 0) ? 1 : 0;
+    return cycles;
+LSR:
+    s->N = 0;
+    s->C = BIT(M, 0);
+    write(m, (M >> 1) & 0x7F);
+    s->Z = (M == 0) ? 1 : 0;
+    return cycles;
+ROR:
+    t = BIT(M, 0);
+    write(m, (M >> 1) & 0x7F);
+    M = read(m);
+    write(m, M | ((s->C) ? 0x80 : 0x00));
+    s->C = t;
+    s->Z = (M == 0) ? 1 : 0;
+    s->N = BIT(M, 7);
+    return cycles;
+STX:
+    write(m, s->X);
+    return cycles;
+LDX:
+    s->X = M;
+    s->N = BIT(s->X, 7);
+    s->Z = (s->X == 0) ? 1 : 0;
+    return cycles;
+DEC:
+    write(m, (M - 1) & 0xFF);
+    s->N = BIT(M, 7);
+    s->Z = (M == 0) ? 1 : 0;
+    return cycles;
+INC:
+    write(m, (M + 1) & 0xFF);
+    s->N = BIT(M, 7);
+    s->Z = (M == 0) ? 1 : 0;
+    return cycles;
+
 CC00:
+    switch(cc) {
+        case 0: //immediate
+            cycles = 2;
+            m = s->PC++;
+            break;
+        case 1: //zero page
+            m = read(s->PC++);
+            cycles = 3;
+            break;
+        case 3: //absolute
+            h = read(s->PC++) << 8;
+            m = h | read(s->PC++);
+            if (aaa == 2) {
+                cycles = 3;
+            } else if (aaa == 3) {
+                M = read(s->PC++);
+                l = read( (M) & 0xFF );
+                h = read( (M + 1) & 0xFF ) <<8;
+                m = h | l;
+                cycles = 5;
+            } else {
+                cycles = 4;
+            }
+            break;
+        case 5: //zero page,x
+            m = (read(s->PC++) + s->X) & 0xFF;
+            cycles = 4;
+            break;
+        case 7: //absolute,x
+            l = read(s->PC++);
+            h = read(s->PC++) << 8;
+            m = h | l;
+            m = m + s->X;
+            break;
+        default:
+            break;
+    }
+
+    M = read(m);
  
 
 }
