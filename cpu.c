@@ -46,10 +46,43 @@ unsigned step(struct state *s, byte (*read)(word), void (*write)(word, byte)) {
     byte bbb = (opcode >> 2) & 0x7;
     byte cc = (opcode) & 0x3;
 
+    // goto OTHERS label for all nonstandard opcodes
+    switch(opcode) {
+        case 0x00:
+        case 0x20:
+        case 0x40:
+        case 0x60:
+        case 0x08:
+        case 0x28:
+        case 0x48:
+        case 0x68:
+        case 0x88:
+        case 0xa8:
+        case 0xc8:
+        case 0xe8:
+        case 0x18:
+        case 0x38:
+        case 0x58:
+        case 0x78:
+        case 0x98:
+        case 0xb8:
+        case 0xd8:
+        case 0xf8:
+        case 0x8a:
+        case 0x9a:
+        case 0xaa:
+        case 0xba:
+        case 0xca:
+        case 0xea:
+            goto OTHERS;
+        default:
+            break;
+    }
+
     // opcode is read as aaabbbcc with cc bits being read first to determine
     // which instruction to run accordingly
     switch(cc) {
-        case 0x1:
+        case 1:
             goto CC01;
         case 2:
             goto CC10;
@@ -181,7 +214,7 @@ CMP:
 
 SBC:
     t = s->A - M - s->C;
-    s->V = (t>127 || t < -128) ? 1 : 0;
+    s->V = (t > 255) ? 1 : 0;
     s->C = (t >= 0) ? 1 : 0;
     s->N = (BIT(t, 7));
     s->Z = (t==0) ? 1 : 0;
@@ -199,7 +232,7 @@ CC10:
             cycles = (aaa == 5 || aaa == 4) ? 3 : 5;
             break;
         case 2: // accumulator
-            //TODO: make this one work
+            m = 0;
             cycles = 2;
             break;
         case 3: // absolute
@@ -256,12 +289,28 @@ CC10:
     }
 
 ASL:
+    if (cc == 2) {
+        s->C = BIT(s->A, 7);
+        s->A = (s->A << 1) & 0xFE;
+        s->N = s->C;
+        s->Z = (s->A == 0) ? 1 : 0;
+        return cycles;
+    }
     s->C = BIT(M, 7);
     write(m, (M << 1) & 0xFE);
     s->N = s->C;
     s->Z = (M == 0) ? 1 : 0;
     return cycles;
 ROL:
+    if (cc == 2) {
+        t = BIT(s->A, 7);
+        s->A = (s->A << 1) & 0xFE;
+        s->A = s->A | s->C;
+        s->C = t;
+        s->N = t;
+        s->Z = (s->A == 0) ? 1 : 0;
+        return cycles;
+    }
     t = BIT(M, 7);
     write(m, (M << 1) & 0xFE);
     M = read(m);
@@ -271,12 +320,28 @@ ROL:
     s->Z = (M == 0) ? 1 : 0;
     return cycles;
 LSR:
+    if (cc == 2) {
+        s->N = 0;
+        s->C = BIT(s->A, 0);
+        s->A = (s->A >> 1) & 0x7F;
+        s->Z = (s->A == 0) ? 1 : 0;
+        return cycles;
+    }
     s->N = 0;
     s->C = BIT(M, 0);
     write(m, (M >> 1) & 0x7F);
     s->Z = (M == 0) ? 1 : 0;
     return cycles;
 ROR:
+    if (cc == 2) {
+        t = BIT(s->A, 0);
+        s->A = (s->A >> 1) & 0x7F;
+        s->A = s->A | ((s->C) ? 0x80 : 0x00);
+        s->C = t;
+        s->Z = (s->A == 0) ? 1 : 0;
+        s->N = BIT(s->A, 7);
+        return cycles;
+    }
     t = BIT(M, 0);
     write(m, (M >> 1) & 0x7F);
     M = read(m);
@@ -305,7 +370,7 @@ INC:
     return cycles;
 
 CC00:
-    switch(cc) {
+    switch(bbb) {
         case 0: //immediate
             cycles = 2;
             m = s->PC++;
@@ -339,13 +404,46 @@ CC00:
             m = h | l;
             m = m + s->X;
             break;
+        case 4:
+            goto CONDITIONALS;
         default:
             break;
     }
 
     M = read(m);
- 
 
+    switch(aaa) {
+        case 1:
+            goto Bit;
+        case 2:
+            goto JMP;
+        case 3:
+            goto Jmp;
+        case 4:
+            goto STY;
+        case 5:
+            goto LDY;
+        case 6:
+            goto CPY;
+        case 7:
+            goto CPX;
+        default:
+            break;
+    }
+
+Bit:
+JMP:
+Jmp:
+STY:
+LDY:
+CPY:
+CPX:
+
+CONDITIONALS:
+
+OTHERS: 
+
+return 0;
 }
 
 void print_state (struct state *s) {
